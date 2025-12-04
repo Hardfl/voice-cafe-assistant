@@ -2,6 +2,7 @@ import os
 import json
 import wave
 import tempfile
+import time
 
 import sounddevice as sd
 from scipy.io.wavfile import write
@@ -109,7 +110,7 @@ def find_drink_in_text(text: str):
             best_match = d
             break
 
-    # Fallback keyword map
+    # Fallback keyword map for fuzzier matches
     if not best_match:
         keyword_map = {
             "caramel": "caramel_latte",
@@ -137,13 +138,11 @@ def find_drink_in_text(text: str):
 
 
 # ===================== VOSK MODEL PATH ===================== #
-# IMPORTANT:
-# If your model folder has a different name, change the last string
-# to match it exactly (e.g. "vosk-model-en-us-0.22").
+
 VOSK_MODEL_PATH = os.path.join(
     os.path.dirname(__file__),
     "models",
-    "vosk-model-small-en-us-0.15"  # <-- change this if needed
+    "vosk-model-en-us-0.22"  # <-- change this if your folder name is different
 )
 
 if not os.path.isdir(VOSK_MODEL_PATH):
@@ -155,16 +154,20 @@ if not os.path.isdir(VOSK_MODEL_PATH):
 vosk_model = Model(VOSK_MODEL_PATH)
 
 # ===================== TTS ENGINE ===================== #
-
-tts_engine = pyttsx3.init()
-
+# We will initialize a NEW engine inside speak() every time.
+# This avoids the "first speak works, others are silent" bug.
 
 def speak(text: str):
-    """Offline text-to-speech."""
+    """Offline text-to-speech for normal messages (re-init engine each call)."""
     print(f"[TTS] {text}")
     try:
-        tts_engine.say(text)
-        tts_engine.runAndWait()
+        engine = pyttsx3.init(driverName='sapi5')  # explicit SAPI5 on Windows
+        engine.say(text)
+        engine.runAndWait()
+        engine.stop()
+        # small pause so audio fully flushes out before next I/O
+        time.sleep(0.05)
+        print("[TTS] Finished speaking.")
     except Exception as e:
         print("TTS error:", e)
 
@@ -181,11 +184,13 @@ def record_audio(seconds=4, fs=16000):
     tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
     write(tmp.name, fs, recording)
     tmp.close()
+    print(f"[REC] Saved temp audio to {tmp.name}")
     return tmp.name
 
 
 def transcribe_audio(file_path: str) -> str:
     """Transcribe audio file using Vosk (offline)."""
+    print(f"[STT] Transcribing {file_path} ...")
     wf = wave.open(file_path, "rb")
 
     if wf.getnchannels() != 1:
@@ -206,7 +211,9 @@ def transcribe_audio(file_path: str) -> str:
     pieces.append(res.get("text", ""))
 
     wf.close()
-    return " ".join(pieces).strip()
+    text = " ".join(pieces).strip()
+    print(f"[STT] Final text: '{text}'")
+    return text
 
 
 # ===================== INTENT HELPERS ===================== #
@@ -248,7 +255,10 @@ def detect_intent(text: str):
         return "menu_all", {}
 
     # Fan favorite / most popular
-    if any(phrase in t for phrase in ["favorite", "favourite", "most popular", "best seller", "best drink"]):
+    if any(
+        phrase in t
+        for phrase in ["favorite", "favourite", "most popular", "best seller", "best drink"]
+    ):
         return "favorite", {}
 
     # Order intent
@@ -272,14 +282,17 @@ def main():
     print(" - 'What teas do you have?'")
     print(" - 'What's the most popular drink?'")
     print(" - 'I want to order a large caramel latte.'")
-    print("\nType 'q' and press Enter to quit, or say 'stop' / 'quit' in your voice.\n")
+    print("\nType 'q' and press Enter to quit, or say 'stop' / 'quit' / 'exit' in your voice.\n")
 
     speak("Welcome to the voice enabled cafe. Ask about the menu or place an order.")
 
     while True:
         user = input("\nPress Enter to record, or type q to quit: ").strip().lower()
         if user == "q":
-            speak("Goodbye. Thanks for visiting the cafe.")
+            reply = "Goodbye. Thanks for visiting the cafe."
+            print("[BOT]", reply)
+            speak(reply)
+            input("Press Enter to close the cafe app...")
             print("Exiting...")
             break
 
@@ -288,6 +301,7 @@ def main():
             text = transcribe_audio(audio_path)
         except Exception as e:
             print("Transcription error:", e)
+            speak("Sorry, something went wrong while understanding you. Please try again.")
             continue
 
         if not text:
@@ -298,9 +312,13 @@ def main():
         print(f"[STT] Heard: {text}")
 
         intent, _ = detect_intent(text)
+        print(f"[INTENT] Detected: {intent}")
 
         if intent == "stop":
-            speak("Okay, stopping now. Goodbye.")
+            reply = "Okay, stopping now. Goodbye."
+            print("[BOT]", reply)
+            speak(reply)
+            input("Press Enter to close the cafe app...")
             print("User requested stop. Exiting...")
             break
 
@@ -308,13 +326,22 @@ def main():
             if intent == "menu_coffee":
                 drinks = get_menu_by_type("coffee")
                 menu_text = build_menu_text(drinks)
-                reply = "Our coffee menu includes: " + menu_text
+                reply = (
+                    "Our coffee menu includes: " + menu_text +
+                    ". You can order any coffee in small, medium, or large size."
+                )
             elif intent == "menu_tea":
                 drinks = get_menu_by_type("tea")
                 menu_text = build_menu_text(drinks)
-                reply = "Our tea menu includes: " + menu_text
+                reply = (
+                    "Our tea menu includes: " + menu_text +
+                    ". Available sizes are small, medium, and large."
+                )
             else:
-                reply = "Here are our drinks: " + build_menu_text(MENU)
+                reply = (
+                    "Here are all our drinks: " + build_menu_text(MENU) +
+                    ". You can order drinks in small, medium, or large sizes."
+                )
 
             print("[BOT]", reply)
             speak(reply)
@@ -339,7 +366,31 @@ def main():
                 speak(reply)
                 continue
 
-            size = parse_size(text)
+            # Check if user mentioned a size; if not, ask and listen again
+            lower_t = text.lower()
+            size_words_present = any(
+                s in lower_t for s in ["small", "medium", "regular", "large", "big"]
+            )
+
+            if not size_words_present:
+                ask = "What size would you like? Small, medium, or large?"
+                print("[BOT]", ask)
+                speak(ask)
+
+                size_audio = record_audio(seconds=3)
+                size_text = transcribe_audio(size_audio)
+                print(f"[STT size] Heard: {size_text}")
+
+                if not size_text:
+                    size = "medium"
+                    info = "I didn't catch a size clearly, so I'll make it medium."
+                    print("[BOT]", info)
+                    speak(info)
+                else:
+                    size = parse_size(size_text)
+            else:
+                size = parse_size(text)
+
             reply = f"Placing an order for a {size} {drink['name']}."
             print("[BOT]", reply)
             speak(reply)
