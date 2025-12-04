@@ -1,0 +1,5 @@
+openai>=1.60.0
+python-dotenv
+sounddevice
+scipy
+playsound==1.2.2
