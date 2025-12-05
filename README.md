@@ -18,7 +18,7 @@ All of this runs **offline** using:
 
 - 10 drink menu:
   - 5 coffees (Classic Latte, Caramel Latte, Iced Mocha, Americano, Espresso Shot)
-  - 5 teas (English Breakfast, Green Jasmine, Chai Latte, Peppermint, Iced Peach Tea)
+  - 6 teas (English Breakfast, Hibiscus Rose-Tea, Chai Latte, Peppermint, Iced Peach Tea, Iced Matcha Latte)
 - Voice intents:
   - “What coffees are on the menu?”
   - “What teas do you have?”
