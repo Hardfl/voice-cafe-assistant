@@ -16,7 +16,7 @@ All of this runs **offline** using:
 
 ## Features
 
-- 10 drink menu:
+- 11 drink menu:
   - 5 coffees (Classic Latte, Caramel Latte, Iced Mocha, Americano, Espresso Shot)
   - 6 teas (English Breakfast, Hibiscus Rose-Tea, Chai Latte, Peppermint, Iced Peach Tea, Iced Matcha Latte)
 - Voice intents:
