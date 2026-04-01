@@ -35,5 +35,5 @@ All of this runs **offline** using:
 1. Clone this repo and enter the folder:
 
    ```bash
-   git clone https://github.com/Hardfl/teaandcoffee_management.git
-   cd teaandcoffee_management
+   git clone https://github.com/Hardfl/voice-cafe-assistant.git
+   cd voice-cafe-assistant
